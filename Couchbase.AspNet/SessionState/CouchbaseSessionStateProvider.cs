@@ -1,18 +1,18 @@
 ﻿using System;
+using System.Diagnostics;
+using System.Globalization;
 using System.Web.SessionState;
 using System.Web;
-using System.IO;
-using System.Web.UI;
 using Enyim.Caching;
-using Enyim.Caching.Memcached;
 
 namespace Couchbase.AspNet.SessionState
 {
 	public class CouchbaseSessionStateProvider : SessionStateStoreProviderBase
 	{
-		private IMemcachedClient client;
-        private bool disposeClient;
-        private static bool exclusiveAccess;
+		private IMemcachedClient _client;
+        private bool _disposeClient;
+        private static bool _exclusiveAccess;
+		private static bool _compressData;
         
 		public override void Initialize(string name, System.Collections.Specialized.NameValueCollection config)
 		{
@@ -20,16 +20,22 @@ namespace Couchbase.AspNet.SessionState
 			base.Initialize(name, config);
 
             // Create our Couchbase client instance
-            client = ProviderHelper.GetClient(name, config, () => (ICouchbaseClientFactory)new CouchbaseClientFactory(), out disposeClient);
+            _client = ProviderHelper.GetClient(name, config, () => (ICouchbaseClientFactory)new CouchbaseClientFactory(), out _disposeClient);
 
             // By default use exclusive session access. But allow it to be overridden in the config file
             var exclusive = ProviderHelper.GetAndRemove(config, "exclusiveAccess", false) ?? "true";
-            exclusiveAccess = (String.Compare(exclusive, "true", true) == 0);
+            _exclusiveAccess = (String.Compare(exclusive, "true", StringComparison.OrdinalIgnoreCase) == 0);
+
+			// By default do not use compression on session data
+			var compress = ProviderHelper.GetAndRemove(config, "compress", false) ?? "false";
+			_compressData = (String.Compare(compress, "true", StringComparison.OrdinalIgnoreCase) == 0);
+
+			LogProviderConfiguration();
 
             // Make sure no extra attributes are included
 			ProviderHelper.CheckForUnknownAttributes(config);
 		}
-
+		
 		public override SessionStateStoreData CreateNewStoreData(HttpContext context, int timeout)
 		{
 			return new SessionStateStoreData(new SessionStateItemCollection(), SessionStateUtility.GetSessionStaticObjects(context), timeout);
@@ -44,13 +50,13 @@ namespace Couchbase.AspNet.SessionState
                 Timeout = timeout
             };
 
-            e.Save(client, id, false, false);
+            e.Save(_client, id, false, false, _compressData);
         }
 
 		public override void Dispose()
 		{
-            if (disposeClient) {
-                client.Dispose();
+            if (_disposeClient) {
+                _client.Dispose();
             }
 		}
 
@@ -58,7 +64,7 @@ namespace Couchbase.AspNet.SessionState
 
         public override SessionStateStoreData GetItem(HttpContext context, string id, out bool locked, out TimeSpan lockAge, out object lockId, out SessionStateActions actions)
         {
-            var e = Get(client, context, false, id, out locked, out lockAge, out lockId, out actions);
+            var e = Get(_client, context, false, id, out locked, out lockAge, out lockId, out actions);
 
             return (e == null)
                     ? null
@@ -67,7 +73,7 @@ namespace Couchbase.AspNet.SessionState
 
         public override SessionStateStoreData GetItemExclusive(HttpContext context, string id, out bool locked, out TimeSpan lockAge, out object lockId, out SessionStateActions actions)
         {
-            var e = Get(client, context, true, id, out locked, out lockAge, out lockId, out actions);
+            var e = Get(_client, context, true, id, out locked, out lockAge, out lockId, out actions);
 
             return (e == null)
                     ? null
@@ -81,7 +87,7 @@ namespace Couchbase.AspNet.SessionState
             lockAge = TimeSpan.Zero;
             actions = SessionStateActions.None;
 
-            var e = SessionStateItem.Load(client, id, false);
+			var e = SessionStateItem.Load(client, id, false, _compressData);
             if (e == null)
                 return null;
 
@@ -96,12 +102,12 @@ namespace Couchbase.AspNet.SessionState
 
                     actions = e.Flag;
 
-                    e.LockId = exclusiveAccess ? e.HeadCas : 0;
+                    e.LockId = _exclusiveAccess ? e.HeadCas : 0;
                     e.LockTime = DateTime.UtcNow;
                     e.Flag = SessionStateActions.None;
 
                     // try to update the item in the store
-                    if (e.Save(client, id, true, exclusiveAccess)) {
+                    if (e.Save(client, id, true, _exclusiveAccess, _compressData)) {
                         locked = true;
                         lockId = e.LockId;
 
@@ -109,7 +115,7 @@ namespace Couchbase.AspNet.SessionState
                     }
 
                     // it has been modified between we loaded and tried to save it
-                    e = SessionStateItem.Load(client, id, false);
+                    e = SessionStateItem.Load(client, id, false, _compressData);
                     if (e == null)
                         return null;
                 }
@@ -133,7 +139,7 @@ namespace Couchbase.AspNet.SessionState
             SessionStateItem e;
             do {
                 // Load the header for the item with CAS
-                e = SessionStateItem.Load(client, id, true);
+                e = SessionStateItem.Load(_client, id, true, _compressData);
 
                 // Bail if the entry does not exist, or the lock ID does not match our lock ID
                 if (e == null || e.LockId != tmp) {
@@ -143,16 +149,16 @@ namespace Couchbase.AspNet.SessionState
                 // Attempt to clear the lock for this item and loop around until we succeed
                 e.LockId = 0;
                 e.LockTime = DateTime.MinValue;
-            } while (!e.Save(client, id, true, exclusiveAccess));
+			} while (!e.Save(_client, id, true, _exclusiveAccess, _compressData));
         }
 
         public override void RemoveItem(HttpContext context, string id, object lockId, SessionStateStoreData item)
         {
             var tmp = (ulong)lockId;
-            var e = SessionStateItem.Load(client, id, true);
+            var e = SessionStateItem.Load(_client, id, true, _compressData);
 
             if (e != null && e.LockId == tmp) {
-                SessionStateItem.Remove(client, id);
+                SessionStateItem.Remove(_client, id);
             }
         }
 
@@ -161,24 +167,24 @@ namespace Couchbase.AspNet.SessionState
             SessionStateItem e;
             do {
                 // Load the item with CAS
-                e = SessionStateItem.Load(client, id, false);
+                e = SessionStateItem.Load(_client, id, false, _compressData);
                 if (e == null) {
                     break;
                 }
 
                 // Try to save with CAS, and loop around until we succeed
-            } while (!e.Save(client, id, false, exclusiveAccess));
+			} while (!e.Save(_client, id, false, _exclusiveAccess, _compressData));
         }
 
         public override void SetAndReleaseItemExclusive(HttpContext context, string id, SessionStateStoreData item, object lockId, bool newItem)
         {
-            SessionStateItem e = null;
+            SessionStateItem e;
             do {
                 if (!newItem) {
                     var tmp = (ulong)lockId;
 
                     // Load the entire item with CAS (need the DataCas value also for the save)
-                    e = SessionStateItem.Load(client, id, false);
+					e = SessionStateItem.Load(_client, id, false, _compressData);
 
                     // if we're expecting an existing item, but
                     // it's not in the cache
@@ -199,163 +205,32 @@ namespace Couchbase.AspNet.SessionState
                 e.LockTime = DateTime.MinValue;
 
                 // Attempt to save with CAS and loop around if it fails
-            } while (!e.Save(client, id, false, exclusiveAccess && !newItem));
+			} while (!e.Save(_client, id, false, _exclusiveAccess && !newItem, _compressData));
         }
 
         public override bool SetItemExpireCallback(SessionStateItemExpireCallback expireCallback)
         {
             return false;
-        }
+		}
 
-		#region [ SessionStateItem             ]
+		#region Private Methods
 
-        public class SessionStateItem
-        {
-            private static readonly string HeaderPrefix = (System.Web.Hosting.HostingEnvironment.SiteName ?? String.Empty).Replace(" ", "-") + "+" + System.Web.Hosting.HostingEnvironment.ApplicationVirtualPath + "info-";
-            private static readonly string DataPrefix = (System.Web.Hosting.HostingEnvironment.SiteName ?? String.Empty).Replace(" ", "-") + "+" + System.Web.Hosting.HostingEnvironment.ApplicationVirtualPath + "data-";
+		private static void LogProviderConfiguration()
+		{
+			var log = new EventLog
+			{
+				Source = "CouchbaseSessionStateProvider"
+			};
 
-            public SessionStateItemCollection Data;
-            public SessionStateActions Flag;
-            public ulong LockId;
-            public DateTime LockTime;
-
-            // this is in minutes
-            public int Timeout;
-
-            public ulong HeadCas;
-            public ulong DataCas;
-
-            private void SaveHeader(MemoryStream ms)
-            {
-                var p = new Pair(
-                                    (byte)1,
-                                    new Triplet(
-                                                    (byte)Flag,
-                                                    Timeout,
-                                                    new Pair(
-                                                                LockId,
-                                                                LockTime.ToBinary()
-                                                            )
-                                                )
-                                );
-
-                new ObjectStateFormatter().Serialize(ms, p);
-            }
-
-            public bool Save(IMemcachedClient client, string id, bool metaOnly, bool useCas)
-            {
-                using (var ms = new MemoryStream()) {
-                    // Save the header first
-                    SaveHeader(ms);
-                    var ts = TimeSpan.FromMinutes(Timeout);
-
-                    // Attempt to save the header and fail if the CAS fails
-                    bool retval = useCas
-                        ? client.Cas(StoreMode.Set, HeaderPrefix + id, new ArraySegment<byte>(ms.GetBuffer(), 0, (int)ms.Length), ts, HeadCas).Result
-                        : client.Store(StoreMode.Set, HeaderPrefix + id, new ArraySegment<byte>(ms.GetBuffer(), 0, (int)ms.Length), ts);
-                    if (retval == false) {
-                        return false;
-                    }
-
-                    // Save the data
-                    if (!metaOnly) {
-                        ms.Position = 0;
-
-                        // Serialize the data
-                        using (var bw = new BinaryWriter(ms)) {
-                            Data.Serialize(bw);
-
-                            // Attempt to save the data and fail if the CAS fails
-                            retval = useCas
-                                ? client.Cas(StoreMode.Set, DataPrefix + id, new ArraySegment<byte>(ms.GetBuffer(), 0, (int)ms.Length), ts, DataCas).Result
-                                : client.Store(StoreMode.Set, DataPrefix + id, new ArraySegment<byte>(ms.GetBuffer(), 0, (int)ms.Length), ts);
-                        }
-                    }
-
-                    // Return the success of the operation
-                    return retval;
-                }
-            }
-
-            private static SessionStateItem LoadItem(MemoryStream ms)
-            {
-                var graph = new ObjectStateFormatter().Deserialize(ms) as Pair;
-                if (graph == null)
-                    return null;
-
-                if (((byte)graph.First) != 1)
-                    return null;
-
-                var t = (Triplet)graph.Second;
-                var retval = new SessionStateItem();
-
-                retval.Flag = (SessionStateActions)((byte)t.First);
-                retval.Timeout = (int)t.Second;
-
-                var lockInfo = (Pair)t.Third;
-
-                retval.LockId = (ulong)lockInfo.First;
-                retval.LockTime = DateTime.FromBinary((long)lockInfo.Second);
-
-                return retval;
-            }
-
-            public static SessionStateItem Load(IMemcachedClient client, string id, bool metaOnly)
-            {
-                return Load(HeaderPrefix, DataPrefix, client, id, metaOnly);
-            }
-
-            public static SessionStateItem Load(string headerPrefix, string dataPrefix, IMemcachedClient client, string id, bool metaOnly)
-            {
-                // Load the header for the item 
-                var header = client.GetWithCas<byte[]>(headerPrefix + id);
-                if (header.Result == null) {
-                    return null;
-                }
-
-                // Deserialize the header values
-                SessionStateItem entry;
-                using (var ms = new MemoryStream(header.Result)) {
-                    entry = SessionStateItem.LoadItem(ms);
-                }
-                entry.HeadCas = header.Cas;
-
-                // Bail early if we are only loading the meta data
-                if (metaOnly) {
-                    return entry;
-                }
-
-                // Load the data for the item
-                var data = client.GetWithCas<byte[]>(dataPrefix + id);
-                if (data.Result == null) {
-                    return null;
-                }
-                entry.DataCas = data.Cas;
-
-                // Deserialize the data
-                using (var ms = new MemoryStream(data.Result)) {
-                    using (var br = new BinaryReader(ms)) {
-                        entry.Data = SessionStateItemCollection.Deserialize(br);
-                    }
-                }
-
-                // Return the session entry
-                return entry;
-            }
-
-            public SessionStateStoreData ToStoreData(HttpContext context)
-            {
-                return new SessionStateStoreData(Data, SessionStateUtility.GetSessionStaticObjects(context), Timeout);
-            }
-
-            public static void Remove(IMemcachedClient client, string id)
-            {
-                client.Remove(DataPrefix + id);
-                client.Remove(HeaderPrefix + id);
-            }
-        }
+			log.WriteEntry(string.Format("IIS Process Id is {0}. Compression is set to {1}. Exclusive Access is set to {2}",
+				Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture),
+				_compressData.ToString(),
+				_exclusiveAccess.ToString()
+				));
+		}
 
 		#endregion
+
 	}
 }
 

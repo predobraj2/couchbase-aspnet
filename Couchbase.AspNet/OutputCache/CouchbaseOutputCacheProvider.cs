@@ -9,8 +9,8 @@ namespace Couchbase.AspNet.OutputCache
 {
     public class CouchbaseOutputCacheProvider : OutputCacheProvider
     {
-        private IMemcachedClient client;
-        private bool disposeClient;
+        private IMemcachedClient _client;
+        private bool _disposeClient;
         private static readonly string Prefix = (System.Web.Hosting.HostingEnvironment.SiteName ?? String.Empty).Replace(" ", "-") + "+" + System.Web.Hosting.HostingEnvironment.ApplicationVirtualPath + "cache-";
 
         /// <summary>
@@ -23,7 +23,7 @@ namespace Couchbase.AspNet.OutputCache
             NameValueCollection config)
         {
             base.Initialize(name, config);
-            client = ProviderHelper.GetClient(name, config, () => (ICouchbaseClientFactory)new CouchbaseClientFactory(), out disposeClient);
+            _client = ProviderHelper.GetClient(name, config, () => (ICouchbaseClientFactory)new CouchbaseClientFactory(), out _disposeClient);
 
             ProviderHelper.CheckForUnknownAttributes(config);
         }
@@ -34,7 +34,7 @@ namespace Couchbase.AspNet.OutputCache
         /// </summary>
         /// <param name="key">Key to sanitize</param>
         /// <returns>Sanitized key</returns>
-        private string SanitizeKey(
+        private static string SanitizeKey(
             string key)
         {
             return Prefix + Convert.ToBase64String(Encoding.UTF8.GetBytes(key), Base64FormattingOptions.None);
@@ -66,16 +66,16 @@ namespace Couchbase.AspNet.OutputCache
 
             // We should only store the item if it's not in the cache. So try to add it and if it 
             // succeeds, return the value we just stored
-            if (client.Store(StoreMode.Add, key, entry, utcExpiry))
+            if (_client.Store(StoreMode.Add, key, entry, utcExpiry))
                 return entry;
 
             // If it's in the cache we should return it
-            var retval = client.Get(key);
+            var retval = _client.Get(key);
 
             // If the item got evicted between the Add and the Get (very rare) we store it anyway, 
             // but this time with Set to make sure it always gets into the cache
             if (retval == null) {
-                client.Store(StoreMode.Set, key, entry, utcExpiry);
+                _client.Store(StoreMode.Set, key, entry, utcExpiry);
                 retval = entry;
             }
 
@@ -93,7 +93,7 @@ namespace Couchbase.AspNet.OutputCache
         public override object Get(
             string key)
         {
-            return client.Get(SanitizeKey(key));
+            return _client.Get(SanitizeKey(key));
         }
 
         /// <summary>
@@ -103,7 +103,7 @@ namespace Couchbase.AspNet.OutputCache
         public override void Remove(
             string key)
         {
-            client.Remove(SanitizeKey(key));
+            _client.Remove(SanitizeKey(key));
         }
 
         /// <summary>
@@ -117,7 +117,7 @@ namespace Couchbase.AspNet.OutputCache
             object entry,
             DateTime utcExpiry)
         {
-            client.Store(StoreMode.Set, SanitizeKey(key), entry, DateTime.SpecifyKind(utcExpiry, DateTimeKind.Utc));
+            _client.Store(StoreMode.Set, SanitizeKey(key), entry, DateTime.SpecifyKind(utcExpiry, DateTimeKind.Utc));
         }
     }
 

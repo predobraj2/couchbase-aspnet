@@ -8,12 +8,15 @@ This library provides infrastructure support for using [Couchbase Server](http:/
 ASP.NET SessionState Provider
 
 * Port of the [Enyim Memcached Provider](https://github.com/enyim/memcached-providers) to Couchbase Server
+* Session data compression is supported, starting from version 1.3.0
+* Provider write his configuration during start to Windows Event Log. Check Application/CouchbaseSessionStateProvider source
+* In version 1.3.0 trivial MVC example was removed from solution.
 
 ## Requirements
 
-* You'll need .NET Framework 3.5 or later to use the precompiled binaries. 
-* To build the client, you'll need Visual Studio 2010 with MVC 3 installed.
-* The Nuget package for [CouchbaseNetClient 1.1.6](http://nuget.org/packages/CouchbaseNetClient) is referenced by Couchbase.AspNet
+* You'll need .NET Framework 4 or later to use the precompiled binaries.
+* To build the client, you'll need Visual Studio 2012.
+* The Nuget package for CouchbaseNetClient (http://nuget.org/packages/CouchbaseNetClient) is referenced by Couchbase.AspNet
 * Couchbase Server 1.8
 
 ## Configuring the SessionState provider
@@ -65,6 +68,20 @@ This session handler also supports the ability to disable exclusive session acce
     <sessionState customProvider="Couchbase" mode="Custom">
       <providers>
         <add name="Couchbase" type="Couchbase.AspNet.SessionState.CouchbaseSessionStateProvider, Couchbase.AspNet" exclusiveAccess="false" />
+      </providers>
+    </sessionState>
+
+This session handler also supports the ability to enable session data compression if desired. By default compression is disabled. 
+Note: you can't enable / disable sessions compression if your storage already contain some users session data! You need to clean up session storage before change compression mode.
+You may want to enable compression of session data on client side (IIS process), if your web servers CPU capacity exceed your network or session storage performance capacity or if you want to bypass Memcached / Couchbase item size limitation of 1Mb / 20Mb correspondantly,
+because compression ratio can be big enough you may store more data in sessions compared to case when you do not use session compression.
+Note however that store huge amount of data in session storage usually considered as bad practice - try to make sure you keep your session data size relatively small.
+
+You can set the value using the "compress" attribute of the provider entry.
+
+    <sessionState customProvider="Couchbase" mode="Custom">
+      <providers>
+        <add name="Couchbase" type="Couchbase.AspNet.SessionState.CouchbaseSessionStateProvider, Couchbase.AspNet" compress="true" />
       </providers>
     </sessionState>
 	
