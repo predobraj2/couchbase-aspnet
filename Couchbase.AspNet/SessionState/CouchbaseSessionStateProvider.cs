@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Web.SessionState;
 using System.Web;
+using Couchbase.AspNet.Compression;
 using Enyim.Caching;
 
 namespace Couchbase.AspNet.SessionState
@@ -13,6 +14,7 @@ namespace Couchbase.AspNet.SessionState
         private bool _disposeClient;
         private static bool _exclusiveAccess;
 		private static bool _compressData;
+		private static ICompressor _compressor;
         
 		public override void Initialize(string name, System.Collections.Specialized.NameValueCollection config)
 		{
@@ -30,6 +32,31 @@ namespace Couchbase.AspNet.SessionState
 			var compress = ProviderHelper.GetAndRemove(config, "compress", false) ?? "false";
 			_compressData = (String.Compare(compress, "true", StringComparison.OrdinalIgnoreCase) == 0);
 
+			// By default we use lz4 instead of gzip, because it is considered much faster!
+			var compressionTypeString = ProviderHelper.GetAndRemove(config, "compressionType", false) ?? "lz4";
+
+			CompressionType compressionType;
+			
+			switch (compressionTypeString.ToLowerInvariant())
+			{
+				case "none":
+					compressionType = CompressionType.None;
+					break;
+
+				case "gzip":
+					compressionType = CompressionType.Gzip;
+					break;
+
+				case "lz4":
+					compressionType = CompressionType.LZ4;
+					break;
+
+				default:
+					throw new NotSupportedException(string.Format("Given compression type {0} not supported", compressionTypeString));
+			}
+
+			_compressor = CompressorFactory.Create(compressionType);
+							
 			LogProviderConfiguration();
 
             // Make sure no extra attributes are included
@@ -50,7 +77,7 @@ namespace Couchbase.AspNet.SessionState
                 Timeout = timeout
             };
 
-            e.Save(_client, id, false, false, _compressData);
+			e.Save(_client, id, false, false, _compressor);
         }
 
 		public override void Dispose()
@@ -87,7 +114,7 @@ namespace Couchbase.AspNet.SessionState
             lockAge = TimeSpan.Zero;
             actions = SessionStateActions.None;
 
-			var e = SessionStateItem.Load(client, id, false, _compressData);
+			var e = SessionStateItem.Load(client, id, false, _compressor);
             if (e == null)
                 return null;
 
@@ -107,7 +134,8 @@ namespace Couchbase.AspNet.SessionState
                     e.Flag = SessionStateActions.None;
 
                     // try to update the item in the store
-                    if (e.Save(client, id, true, _exclusiveAccess, _compressData)) {
+					if (e.Save(client, id, true, _exclusiveAccess, _compressor))
+					{
                         locked = true;
                         lockId = e.LockId;
 
@@ -115,7 +143,7 @@ namespace Couchbase.AspNet.SessionState
                     }
 
                     // it has been modified between we loaded and tried to save it
-                    e = SessionStateItem.Load(client, id, false, _compressData);
+					e = SessionStateItem.Load(client, id, false, _compressor);
                     if (e == null)
                         return null;
                 }
@@ -139,7 +167,7 @@ namespace Couchbase.AspNet.SessionState
             SessionStateItem e;
             do {
                 // Load the header for the item with CAS
-                e = SessionStateItem.Load(_client, id, true, _compressData);
+				e = SessionStateItem.Load(_client, id, true, _compressor);
 
                 // Bail if the entry does not exist, or the lock ID does not match our lock ID
                 if (e == null || e.LockId != tmp) {
@@ -149,13 +177,13 @@ namespace Couchbase.AspNet.SessionState
                 // Attempt to clear the lock for this item and loop around until we succeed
                 e.LockId = 0;
                 e.LockTime = DateTime.MinValue;
-			} while (!e.Save(_client, id, true, _exclusiveAccess, _compressData));
+			} while (!e.Save(_client, id, true, _exclusiveAccess, _compressor));
         }
 
         public override void RemoveItem(HttpContext context, string id, object lockId, SessionStateStoreData item)
         {
             var tmp = (ulong)lockId;
-            var e = SessionStateItem.Load(_client, id, true, _compressData);
+			var e = SessionStateItem.Load(_client, id, true, _compressor);
 
             if (e != null && e.LockId == tmp) {
                 SessionStateItem.Remove(_client, id);
@@ -167,13 +195,13 @@ namespace Couchbase.AspNet.SessionState
             SessionStateItem e;
             do {
                 // Load the item with CAS
-                e = SessionStateItem.Load(_client, id, false, _compressData);
+				e = SessionStateItem.Load(_client, id, false, _compressor);
                 if (e == null) {
                     break;
                 }
 
                 // Try to save with CAS, and loop around until we succeed
-			} while (!e.Save(_client, id, false, _exclusiveAccess, _compressData));
+			} while (!e.Save(_client, id, false, _exclusiveAccess, _compressor));
         }
 
         public override void SetAndReleaseItemExclusive(HttpContext context, string id, SessionStateStoreData item, object lockId, bool newItem)
@@ -184,7 +212,7 @@ namespace Couchbase.AspNet.SessionState
                     var tmp = (ulong)lockId;
 
                     // Load the entire item with CAS (need the DataCas value also for the save)
-					e = SessionStateItem.Load(_client, id, false, _compressData);
+					e = SessionStateItem.Load(_client, id, false, _compressor);
 
                     // if we're expecting an existing item, but
                     // it's not in the cache
@@ -205,7 +233,7 @@ namespace Couchbase.AspNet.SessionState
                 e.LockTime = DateTime.MinValue;
 
                 // Attempt to save with CAS and loop around if it fails
-			} while (!e.Save(_client, id, false, _exclusiveAccess && !newItem, _compressData));
+			} while (!e.Save(_client, id, false, _exclusiveAccess && !newItem, _compressor));
         }
 
         public override bool SetItemExpireCallback(SessionStateItemExpireCallback expireCallback)
@@ -222,9 +250,10 @@ namespace Couchbase.AspNet.SessionState
 				Source = "CouchbaseSessionStateProvider"
 			};
 
-			log.WriteEntry(string.Format("IIS Process Id is {0}. Compression is set to {1}. Exclusive Access is set to {2}",
+			log.WriteEntry(string.Format("IIS Process Id is {0}. Compression is set to {1}. Selected Compressor: {2}. Exclusive Access is set to {3}",
 				Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture),
 				_compressData.ToString(),
+				_compressor != null ? _compressor.GetType().Name : "None",
 				_exclusiveAccess.ToString()
 				));
 		}

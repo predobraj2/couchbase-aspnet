@@ -1,9 +1,9 @@
 ﻿using System;
-using System.IO.Compression;
 using System.Web.SessionState;
 using System.Web;
 using System.IO;
 using System.Web.UI;
+using Couchbase.AspNet.Compression;
 using Enyim.Caching;
 using Enyim.Caching.Memcached;
 
@@ -42,7 +42,7 @@ namespace Couchbase.AspNet.SessionState
 			new ObjectStateFormatter().Serialize(ms, p);
 		}
 
-		public bool Save(IMemcachedClient client, string id, bool metaOnly, bool useCas, bool compress)
+		public bool Save(IMemcachedClient client, string id, bool metaOnly, bool useCas, ICompressor compressor)
 		{
 			using (var ms = new MemoryStream())
 			{
@@ -72,7 +72,7 @@ namespace Couchbase.AspNet.SessionState
 						byte[] data;
 						int length;
 
-						if (!compress)
+						if (compressor == null)
 						{
 							data = ms.GetBuffer();
 							length = (int)ms.Length;
@@ -80,7 +80,7 @@ namespace Couchbase.AspNet.SessionState
 						else
 						{
 							var uncompressedData = ms.GetBuffer();
-							data = Compress(uncompressedData);
+							data = compressor.Compress(uncompressedData);
 							length = data.Length;
 						}
 
@@ -98,12 +98,12 @@ namespace Couchbase.AspNet.SessionState
 			}
 		}
 	
-		public static SessionStateItem Load(IMemcachedClient client, string id, bool metaOnly, bool compress)
+		public static SessionStateItem Load(IMemcachedClient client, string id, bool metaOnly, ICompressor compressor)
 		{
-			return Load(HeaderPrefix, DataPrefix, client, id, metaOnly,compress);
+			return Load(HeaderPrefix, DataPrefix, client, id, metaOnly, compressor);
 		}
 
-		public static SessionStateItem Load(string headerPrefix, string dataPrefix, IMemcachedClient client, string id, bool metaOnly, bool compress)
+		public static SessionStateItem Load(string headerPrefix, string dataPrefix, IMemcachedClient client, string id, bool metaOnly, ICompressor compressor)
 		{
 			// Load the header for the item 
 			var header = client.GetWithCas<byte[]>(headerPrefix + id);
@@ -135,7 +135,7 @@ namespace Couchbase.AspNet.SessionState
 			entry.DataCas = data.Cas;
 
 			// Deserialize the data
-			if (!compress)
+			if (compressor == null)
 			{
 				using (var ms = new MemoryStream(data.Result))
 				{					
@@ -151,7 +151,7 @@ namespace Couchbase.AspNet.SessionState
 				{
 					using (var output = new MemoryStream())
 					{
-						Decompress(input, output);
+						compressor.Decompress(input, output);
 						output.Position = 0;
 						using (var reader = new BinaryReader(output))
 						{
@@ -201,50 +201,7 @@ namespace Couchbase.AspNet.SessionState
 
 			return retval;
 		}
-
-		private static byte[] Compress(byte[] data)
-		{
-
-			using (var output = new MemoryStream())
-			{
-				try
-				{
-					using (var gzip = new GZipStream(output, CompressionMode.Compress, true))
-					{
-						gzip.Write(data, 0, data.Length);
-						gzip.Close();
-					}
-				}
-				catch (Exception ex)
-				{
-					throw new Exception("Cannot Compress Session Data", ex);
-				}
-				return output.ToArray();
-			}
-		}
-
-		private static void Decompress(Stream input, Stream output)
-		{
-			try
-			{
-				using (var gzip = new GZipStream(input, CompressionMode.Decompress, true))
-				{
-					var buff = new byte[64];
-					int read = gzip.Read(buff, 0, buff.Length);
-					while (read > 0)
-					{
-						output.Write(buff, 0, read);
-						read = gzip.Read(buff, 0, buff.Length);
-					}
-					gzip.Close();
-				}
-			}
-			catch (Exception ex)
-			{
-				throw new Exception("Cannot Decompress Session Data", ex);
-			}
-		}
-
+	
 		#endregion
 
 	}

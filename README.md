@@ -7,10 +7,12 @@ This library provides infrastructure support for using [Couchbase Server](http:/
 
 ASP.NET SessionState Provider
 
-* Port of the [Enyim Memcached Provider](https://github.com/enyim/memcached-providers) to Couchbase Server
+* Port of the [Enyim Memcached Provider](https://github.com/enyim/memcached-providers) to Couchbase Server with some improvements
 * Session data compression is supported, starting from version 1.3.0
-* Provider write his configuration during start to Windows Event Log. Check Application/CouchbaseSessionStateProvider source
-* In version 1.3.0 trivial MVC example was removed from solution.
+* LZ4 fast compression algorithm supported in version 1.3.1 and is default algorithm if compression enabled.
+* LZ4Sharp library used for fastest compression (https://github.com/stangelandcl/LZ4Sharp) and added as project to solution (licensed under BSD License)
+* Provider write his configuration during start to Windows Event Log. Check Application/CouchbaseSessionStateProvider source (using Event Viewer)
+* Starting from version 1.3.0, trivial MVC example was removed from solution.
 
 ## Requirements
 
@@ -82,6 +84,14 @@ You can set the value using the "compress" attribute of the provider entry.
     <sessionState customProvider="Couchbase" mode="Custom">
       <providers>
         <add name="Couchbase" type="Couchbase.AspNet.SessionState.CouchbaseSessionStateProvider, Couchbase.AspNet" compress="true" />
+      </providers>
+    </sessionState>
+
+It is also possible to select compression algorithm (starting from version 1.3.1): GZip ('gzip') and LZ4 ('lz4') are currently supported. You can change it using 'compressionType' attribute of the provider entry.
+
+    <sessionState customProvider="Couchbase" mode="Custom">
+      <providers>
+        <add name="Couchbase" type="Couchbase.AspNet.SessionState.CouchbaseSessionStateProvider, Couchbase.AspNet" compress="true" compressionType="lz4" />
       </providers>
     </sessionState>
 	
