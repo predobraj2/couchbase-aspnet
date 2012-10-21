@@ -27,20 +27,24 @@ namespace Couchbase.AspNet.Compression
 			}
 		}
 
-		public void Decompress(Stream input, Stream output)
+		public byte[] Decompress(MemoryStream input)
 		{
 			try
 			{
-				using (var gzip = new GZipStream(input, CompressionMode.Decompress, true))
+				using (var output = new MemoryStream())
 				{
-					var buff = new byte[64];
-					int read = gzip.Read(buff, 0, buff.Length);
-					while (read > 0)
+					using (var gzip = new GZipStream(input, CompressionMode.Decompress, true))
 					{
-						output.Write(buff, 0, read);
-						read = gzip.Read(buff, 0, buff.Length);
+						var buff = new byte[64];
+						int read = gzip.Read(buff, 0, buff.Length);
+						while (read > 0)
+						{
+							output.Write(buff, 0, read);
+							read = gzip.Read(buff, 0, buff.Length);
+						}
+						gzip.Close();
 					}
-					gzip.Close();
+					return output.ToArray();
 				}
 			}
 			catch (Exception ex)

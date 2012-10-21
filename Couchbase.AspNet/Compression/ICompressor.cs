@@ -6,6 +6,6 @@ namespace Couchbase.AspNet.Compression
 	{
 		byte[] Compress(byte[] data);
 
-		void Decompress(Stream input, Stream output);
+		byte[] Decompress(MemoryStream input);
 	}
 }

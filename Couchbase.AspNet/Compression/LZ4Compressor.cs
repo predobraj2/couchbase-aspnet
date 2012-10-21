@@ -23,13 +23,9 @@ namespace Couchbase.AspNet.Compression
 			return Compressor.Compress(data);
 		}
 
-		public void Decompress(Stream input, Stream output)
+		public byte[] Decompress(MemoryStream input)
 		{
-			using (var br = new BinaryReader(input))
-			{
-				var res = Decompressor.Decompress(br.ReadBytes((int) input.Length));
-				output.Write(res, 0, res.Length);
-			}			
+			return Decompressor.Decompress(input.ToArray());			
 		}
 	}
 }

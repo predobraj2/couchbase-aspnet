@@ -44,66 +44,85 @@ namespace Couchbase.AspNet.SessionState
 
 		public bool Save(IMemcachedClient client, string id, bool metaOnly, bool useCas, ICompressor compressor)
 		{
+			var ts = TimeSpan.FromMinutes(Timeout);
+
+			bool retval;
+
 			using (var ms = new MemoryStream())
 			{
 				// Save the header first
 				SaveHeader(ms);
-				var ts = TimeSpan.FromMinutes(Timeout);
 
 				// Attempt to save the header and fail if the CAS fails
-				bool retval = useCas
-					? client.Cas(StoreMode.Set, HeaderPrefix + id, new ArraySegment<byte>(ms.GetBuffer(), 0, (int)ms.Length), ts, HeadCas).Result
-					: client.Store(StoreMode.Set, HeaderPrefix + id, new ArraySegment<byte>(ms.GetBuffer(), 0, (int)ms.Length), ts);
+				retval = useCas
+					         ? client.Cas(StoreMode.Set, HeaderPrefix + id,
+					                      new ArraySegment<byte>(ms.GetBuffer(), 0, (int) ms.Length), ts, HeadCas).Result
+					         : client.Store(StoreMode.Set, HeaderPrefix + id,
+					                        new ArraySegment<byte>(ms.GetBuffer(), 0, (int) ms.Length), ts);
 				if (retval == false)
 				{
 					return false;
 				}
+			}
 
-				// Save the data
-				if (!metaOnly)
+			// Save the data
+			if (!metaOnly)
+			{
+
+				byte[] data;
+
+				ArraySegment<byte> arraySegment;
+
+				using (var ms = new MemoryStream())
 				{
-					ms.Position = 0;
-
-					// Serialize the data
 					using (var bw = new BinaryWriter(ms))
 					{
+						// Serialize the data
 						Data.Serialize(bw);
-
-						byte[] data;
-						int length;
-
-						if (compressor == null)
-						{
-							data = ms.GetBuffer();
-							length = (int)ms.Length;
-						}
-						else
-						{
-							var uncompressedData = ms.GetBuffer();
-							data = compressor.Compress(uncompressedData);
-							length = data.Length;
-						}
-
-						var arraySegment = new ArraySegment<byte>(data, 0, length);
-
-						// Attempt to save the data and fail if the CAS fails
-						retval = useCas
-							? client.Cas(StoreMode.Set, DataPrefix + id, arraySegment, ts, DataCas).Result
-							: client.Store(StoreMode.Set, DataPrefix + id, arraySegment, ts);
+						data = ms.ToArray();						
 					}
 				}
 
-				// Return the success of the operation
-				return retval;
+				if (compressor == null)
+				{
+					arraySegment = new ArraySegment<byte>(data);
+				}
+				else
+				{
+					var tempdata = compressor.Compress(data);
+					arraySegment = new ArraySegment<byte>(tempdata);
+				}
+
+				// Attempt to save the data and fail if the CAS fails
+				retval = useCas
+					         ? client.Cas(StoreMode.Set, DataPrefix + id, arraySegment, ts, DataCas).Result
+					         : client.Store(StoreMode.Set, DataPrefix + id, arraySegment, ts);
 			}
+
+			// Return the success of the operation
+			return retval;
+
 		}
-	
+
 		public static SessionStateItem Load(IMemcachedClient client, string id, bool metaOnly, ICompressor compressor)
 		{
 			return Load(HeaderPrefix, DataPrefix, client, id, metaOnly, compressor);
 		}
+	
+		public SessionStateStoreData ToStoreData(HttpContext context)
+		{
+			return new SessionStateStoreData(Data, SessionStateUtility.GetSessionStaticObjects(context), Timeout);
+		}
 
-		public static SessionStateItem Load(string headerPrefix, string dataPrefix, IMemcachedClient client, string id, bool metaOnly, ICompressor compressor)
+		public static void Remove(IMemcachedClient client, string id)
+		{
+			client.Remove(DataPrefix + id);
+			client.Remove(HeaderPrefix + id);
+		}
+
+		#region Private
+
+		private static SessionStateItem Load(string headerPrefix, string dataPrefix, IMemcachedClient client, string id, bool metaOnly, ICompressor compressor)
 		{
 			// Load the header for the item 
 			var header = client.GetWithCas<byte[]>(headerPrefix + id);
@@ -138,7 +157,7 @@ namespace Couchbase.AspNet.SessionState
 			if (compressor == null)
 			{
 				using (var ms = new MemoryStream(data.Result))
-				{					
+				{
 					using (var br = new BinaryReader(ms))
 					{
 						entry.Data = SessionStateItemCollection.Deserialize(br);
@@ -149,10 +168,9 @@ namespace Couchbase.AspNet.SessionState
 			{
 				using (var input = new MemoryStream(data.Result))
 				{
-					using (var output = new MemoryStream())
+					var decompressed = compressor.Decompress(input);
+					using (var output = new MemoryStream(decompressed))
 					{
-						compressor.Decompress(input, output);
-						output.Position = 0;
 						using (var reader = new BinaryReader(output))
 						{
 							entry.Data = SessionStateItemCollection.Deserialize(reader);
@@ -160,23 +178,10 @@ namespace Couchbase.AspNet.SessionState
 					}
 				}
 			}
-						
+
 			// Return the session entry
 			return entry;
 		}
-
-		public SessionStateStoreData ToStoreData(HttpContext context)
-		{
-			return new SessionStateStoreData(Data, SessionStateUtility.GetSessionStaticObjects(context), Timeout);
-		}
-
-		public static void Remove(IMemcachedClient client, string id)
-		{
-			client.Remove(DataPrefix + id);
-			client.Remove(HeaderPrefix + id);
-		}
-
-		#region Private
 
 		private static SessionStateItem LoadItem(MemoryStream ms)
 		{
