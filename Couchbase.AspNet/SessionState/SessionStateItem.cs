@@ -6,11 +6,14 @@ using System.Web.UI;
 using Couchbase.AspNet.Compression;
 using Enyim.Caching;
 using Enyim.Caching.Memcached;
+using NLog;
 
 namespace Couchbase.AspNet.SessionState
 {
 	public class SessionStateItem
 	{
+		#region Members
+
 		private static readonly string HeaderPrefix = (System.Web.Hosting.HostingEnvironment.SiteName ?? String.Empty).Replace(" ", "-") + "+" + System.Web.Hosting.HostingEnvironment.ApplicationVirtualPath + "info-";
 		private static readonly string DataPrefix = (System.Web.Hosting.HostingEnvironment.SiteName ?? String.Empty).Replace(" ", "-") + "+" + System.Web.Hosting.HostingEnvironment.ApplicationVirtualPath + "data-";
 
@@ -25,24 +28,9 @@ namespace Couchbase.AspNet.SessionState
 		public ulong HeadCas;
 		public ulong DataCas;
 
-		private void SaveHeader(MemoryStream ms)
-		{
-			var p = new Pair(
-								(byte)1,
-								new Triplet(
-												(byte)Flag,
-												Timeout,
-												new Pair(
-															LockId,
-															LockTime.ToBinary()
-														)
-											)
-							);
+		#endregion
 
-			new ObjectStateFormatter().Serialize(ms, p);
-		}
-
-		public bool Save(IMemcachedClient client, string id, bool metaOnly, bool useCas, ICompressor compressor)
+		public bool Save(IMemcachedClient client, string id, bool metaOnly, bool useCas, ICompressor compressor, Logger logger)
 		{
 			var ts = TimeSpan.FromMinutes(Timeout);
 
@@ -82,14 +70,17 @@ namespace Couchbase.AspNet.SessionState
 						data = ms.ToArray();						
 					}
 				}
-
+			
 				if (compressor == null)
 				{
+					logger.Info(string.Format("Save Item with size {0}", data.LongLength));
 					arraySegment = new ArraySegment<byte>(data);
 				}
 				else
 				{
 					var tempdata = compressor.Compress(data);
+					logger.Info(string.Format("Save Item that was compressed from {0} bytes to {1} bytes", data.LongLength, tempdata.LongLength));
+
 					arraySegment = new ArraySegment<byte>(tempdata);
 				}
 
@@ -104,9 +95,9 @@ namespace Couchbase.AspNet.SessionState
 
 		}
 
-		public static SessionStateItem Load(IMemcachedClient client, string id, bool metaOnly, ICompressor compressor)
+		public static SessionStateItem Load(IMemcachedClient client, string id, bool metaOnly, ICompressor compressor, Logger logger)
 		{
-			return Load(HeaderPrefix, DataPrefix, client, id, metaOnly, compressor);
+			return Load(HeaderPrefix, DataPrefix, client, id, metaOnly, compressor, logger);
 		}
 	
 		public SessionStateStoreData ToStoreData(HttpContext context)
@@ -122,7 +113,24 @@ namespace Couchbase.AspNet.SessionState
 
 		#region Private
 
-		private static SessionStateItem Load(string headerPrefix, string dataPrefix, IMemcachedClient client, string id, bool metaOnly, ICompressor compressor)
+		private void SaveHeader(MemoryStream ms)
+		{
+			var p = new Pair(
+								(byte)1,
+								new Triplet(
+												(byte)Flag,
+												Timeout,
+												new Pair(
+															LockId,
+															LockTime.ToBinary()
+														)
+											)
+							);
+
+			new ObjectStateFormatter().Serialize(ms, p);
+		}
+
+		private static SessionStateItem Load(string headerPrefix, string dataPrefix, IMemcachedClient client, string id, bool metaOnly, ICompressor compressor, Logger logger)
 		{
 			// Load the header for the item 
 			var header = client.GetWithCas<byte[]>(headerPrefix + id);
@@ -156,6 +164,8 @@ namespace Couchbase.AspNet.SessionState
 			// Deserialize the data
 			if (compressor == null)
 			{
+				logger.Info(string.Format("Load data from Session with size {0}", data.Result.LongLength));
+
 				using (var ms = new MemoryStream(data.Result))
 				{
 					using (var br = new BinaryReader(ms))
@@ -169,6 +179,9 @@ namespace Couchbase.AspNet.SessionState
 				using (var input = new MemoryStream(data.Result))
 				{
 					var decompressed = compressor.Decompress(input);
+
+					logger.Info(string.Format("Load data from Session with compessed size {0}. Size after decompression is {1}", data.Result.LongLength, decompressed.LongLength));
+
 					using (var output = new MemoryStream(decompressed))
 					{
 						using (var reader = new BinaryReader(output))
