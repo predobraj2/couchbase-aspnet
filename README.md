@@ -9,9 +9,13 @@ ASP.NET SessionState Provider
 
 * Port of the [Enyim Memcached Provider](https://github.com/enyim/memcached-providers) to Couchbase Server with some improvements
 * Session data compression is supported, starting from version 1.3.0
-* LZ4 fast compression algorithm supported in version 1.3.1 and is default algorithm if compression enabled.
+* Starting from version 1.3.2 NLog logging can be enabled to output basic information for all Save / Load actions (item id and size before and after compression)
+* LZ4 fast compression algorithm supported in version 1.3.1 and was default algorithm if compression enabled for 1.3.1 version.
+* QuickLZ very fast compression algorithm supported in version 1.3.2 and now is default algorithm if compression enabled (in version 1.3.2).
 * LZ4Sharp library used for fastest compression (https://github.com/stangelandcl/LZ4Sharp) and added as project to solution (licensed under BSD License)
-* Provider write his configuration during start to Windows Event Log. Check Application/CouchbaseSessionStateProvider source (using Event Viewer)
+* QuickLZ DLL used from http://www.quicklz.com/download.html
+* Provider write his configuration during start to Windows Event Log (version 1.3.1) and in addition to log file (starting from version 1.3.2).
+  Check Application/CouchbaseSessionStateProvider source (using Event Viewer) and Logs/CouchbaseSessionStateProvider.log file
 * Starting from version 1.3.0, trivial MVC example was removed from solution.
 
 ## Requirements
@@ -87,14 +91,26 @@ You can set the value using the "compress" attribute of the provider entry.
       </providers>
     </sessionState>
 
-It is also possible to select compression algorithm (starting from version 1.3.1): GZip ('gzip') and LZ4 ('lz4') are currently supported. You can change it using 'compressionType' attribute of the provider entry.
+It is also possible to select compression algorithm (starting from version 1.3.1): GZip ('gzip'), LZ4 ('lz4'), QuickLZ ('quicklz') are currently supported.
+You can change it using 'compressionType' attribute of the provider entry.
 
     <sessionState customProvider="Couchbase" mode="Custom">
       <providers>
-        <add name="Couchbase" type="Couchbase.AspNet.SessionState.CouchbaseSessionStateProvider, Couchbase.AspNet" compress="true" compressionType="lz4" />
+        <add name="Couchbase" type="Couchbase.AspNet.SessionState.CouchbaseSessionStateProvider, Couchbase.AspNet" compress="true" compressionType="quicklz" />
       </providers>
     </sessionState>
+
+Starting from version 1.3.2 logging (using NLog) can be enabled (logging disabled by default):
+
+    <sessionState customProvider="Couchbase" mode="Custom">
+      <providers>
+        <add name="Couchbase" type="Couchbase.AspNet.SessionState.CouchbaseSessionStateProvider, Couchbase.AspNet" logging="true" />
+      </providers>
+    </sessionState>
+
+Please make sure you create 'Logs' folder in the root folder of your Web application. Logs will be stored in file 'CouchbaseSessionStateProvider.logs' in that folder.
 	
+
 Note that currently, code-based configuration of the CouchbaseClient is not supported.
 
 In code, simply use the Session object as you normally would.

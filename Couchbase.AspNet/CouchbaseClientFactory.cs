@@ -16,13 +16,15 @@ namespace Couchbase.AspNet
             // Get the section name from the configuration file. If not found, create a default Couchbase client which 
             // will get the configuration information from the default Couchbase client section in the Web.config file
             var sectionName = ProviderHelper.GetAndRemove(config, "section", false);
+
             if (String.IsNullOrEmpty(sectionName))
                 return new CouchbaseClient();
 
             // If a custom section name is passed in, get the section information and use it to construct the Couchbase client
             var section = ConfigurationManager.GetSection(sectionName) as ICouchbaseClientConfiguration;
             if (section == null)
-                throw new InvalidOperationException("Invalid config section: " + section);
+				throw new InvalidOperationException("Invalid config section: " + sectionName);
+
             return new CouchbaseClient(section);
         }
     }

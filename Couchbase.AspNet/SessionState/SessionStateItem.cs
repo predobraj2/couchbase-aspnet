@@ -73,13 +73,17 @@ namespace Couchbase.AspNet.SessionState
 			
 				if (compressor == null)
 				{
-					logger.Info(string.Format("Save Item with size {0}", data.LongLength));
+					if (logger != null)
+						logger.Info(string.Format("Save Item with id '{0}' with size {1}", id, data.LongLength));
+
 					arraySegment = new ArraySegment<byte>(data);
 				}
 				else
 				{
 					var tempdata = compressor.Compress(data);
-					logger.Info(string.Format("Save Item that was compressed from {0} bytes to {1} bytes", data.LongLength, tempdata.LongLength));
+
+					if (logger != null)
+						logger.Info(string.Format("Save Item with id '{0}' that was compressed from {1} bytes to {2} bytes", id, data.LongLength, tempdata.LongLength));
 
 					arraySegment = new ArraySegment<byte>(tempdata);
 				}
@@ -164,7 +168,8 @@ namespace Couchbase.AspNet.SessionState
 			// Deserialize the data
 			if (compressor == null)
 			{
-				logger.Info(string.Format("Load data from Session with size {0}", data.Result.LongLength));
+				if (logger != null)
+					logger.Info(string.Format("Load data from Session item with id '{0}' with size {1}", id, data.Result.LongLength));
 
 				using (var ms = new MemoryStream(data.Result))
 				{
@@ -180,7 +185,8 @@ namespace Couchbase.AspNet.SessionState
 				{
 					var decompressed = compressor.Decompress(input);
 
-					logger.Info(string.Format("Load data from Session with compessed size {0}. Size after decompression is {1}", data.Result.LongLength, decompressed.LongLength));
+					if (logger != null)
+						logger.Info(string.Format("Load data from Session item with id '{0}' with compessed size {1}. Size after decompression is {2}", id, data.Result.LongLength, decompressed.LongLength));
 
 					using (var output = new MemoryStream(decompressed))
 					{

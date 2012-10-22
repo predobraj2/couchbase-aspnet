@@ -29,6 +29,7 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup>
     <SignAssembly>true</SignAssembly>
@@ -67,6 +68,7 @@
   <ItemGroup>
     <Compile Include="Compression\CompressionType.cs" />
     <Compile Include="Compression\CompressorFactory.cs" />
+    <Compile Include="Compression\QuickLZ.cs" />
     <Compile Include="Compression\GzipCompressor.cs" />
     <Compile Include="Compression\ICompressor.cs" />
     <Compile Include="Compression\LZ4Compressor.cs" />
@@ -87,6 +89,10 @@
     <ProjectReference Include="..\LZ4Sharp\LZ4Sharp.csproj">
       <Project>{F234773A-FFD4-4964-AC20-7D890C29E9C2}</Project>
       <Name>LZ4Sharp</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\QuickLZ\QuickLZ.csproj">
+      <Project>{d6a780f3-d2a2-4927-8a1b-19ebf5bf22aa}</Project>
+      <Name>QuickLZ</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

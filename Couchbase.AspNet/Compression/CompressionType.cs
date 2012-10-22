@@ -4,6 +4,7 @@
 	{
 		None = 0,
 		Gzip = 1,
-		LZ4 = 2
+		LZ4 = 2,
+		QuickLZ = 3
 	}
 }
