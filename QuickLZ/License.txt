@@ -1,0 +1,11 @@
+﻿// QuickLZ data compression library
+// Copyright (C) 2006-2011 Lasse Mikkel Reinhold
+// lar@quicklz.com
+//
+// QuickLZ can be used for free under the GPL 1, 2 or 3 license (where anything 
+// released into public must be open source) or under a commercial license if such 
+// has been acquired (see http://www.quicklz.com/order.html). The commercial license 
+// does not cover derived or ported versions created by third parties under GPL.
+
+So please make sure to read more about QuickLZ licenses at http://www.quicklz.com/order.html and if required purchase enterprise
+commercial license for development for any amount of closed source products and product titles with unlimited distribution/sales.

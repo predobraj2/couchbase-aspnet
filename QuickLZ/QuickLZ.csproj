@@ -50,6 +50,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="License.txt" />
     <Content Include="QuickLZC\quicklz150_32_1.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>

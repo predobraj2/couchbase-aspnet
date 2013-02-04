@@ -1,6 +1,6 @@
    LZ4Sharp
    Copyright (C) 2011, Clayton Stangeland
-		
+        
    BSD License
 
    Redistribution and use in source and binary forms, with or without
