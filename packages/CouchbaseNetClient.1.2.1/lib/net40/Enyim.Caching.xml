@@ -1431,9 +1431,20 @@
             <remarks>It should return an instance which is safe to enumerate multiple times and provides the same results every time.</remarks>
             <returns></returns>
         </member>
+        <member name="T:Enyim.Caching.Memcached.KeyTransformers.LegacyMemcachedKeyTransformer">
+            <summary>
+            A key transfomer that provides support for legacy memcached key rules
+            </summary>
+        </member>
         <member name="T:Enyim.Caching.Memcached.Base64KeyTransformer">
             <summary>
             A key transformer which converts the item keys into Base64.
+            </summary>
+        </member>
+        <member name="T:Enyim.Caching.Memcached.DefaultKeyTransformer">
+            <summary>
+            A transformer that simply returns the original key.
+            A valid UTF-8 key is recommended.
             </summary>
         </member>
         <member name="T:Enyim.Caching.Memcached.SHA1KeyTransformer">

@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
   <metadata>
     <id>CouchbaseNetClient</id>
-    <version>1.2.0</version>
+    <version>1.2.1</version>
     <authors>Couchbase,  Inc.</authors>
     <owners>Couchbase,  Inc.</owners>
     <licenseUrl>http://www.apache.org/licenses/LICENSE-2.0</licenseUrl>
@@ -17,6 +17,7 @@
     <references>
       <reference file="Couchbase.dll" />
       <reference file="Enyim.Caching.dll" />
+      <reference file="RestSharp.dll" />
     </references>
   </metadata>
 </package>
