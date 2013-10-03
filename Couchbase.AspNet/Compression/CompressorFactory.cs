@@ -4,96 +4,96 @@ namespace Couchbase.AspNet.Compression
 {
 
     /// <summary>
-    /// Responsable to Create Compressor
+    /// Responsible to Create Compressor and cache it instance inside
     /// </summary>
-	public static class CompressorFactory
-	{
-		private volatile static ICompressor _compressor;
-		private static readonly object CompressorSync = new object();
+    public static class CompressorFactory
+    {
+        private volatile static ICompressor _compressor;
+        private static readonly object CompressorSync = new object();
 
-		/// <summary>
-		/// Creates Compressor of given type and cache instance locally
-		/// </summary>
-		/// <param name="compressionTypeString"></param>
-		/// <returns></returns>
-		public static ICompressor Create(string compressionTypeString)
-		{
-			CompressionType compressionType;
+        /// <summary>
+        /// Creates Compressor of given type and cache instance locally
+        /// </summary>
+        /// <param name="compressionTypeString"></param>
+        /// <returns></returns>
+        public static ICompressor Create(string compressionTypeString)
+        {
+            CompressionType compressionType;
 
-			switch (compressionTypeString.ToLowerInvariant())
-			{
-				case "none":
-					compressionType = CompressionType.None;
-					break;
+            switch (compressionTypeString.ToLowerInvariant())
+            {
+                case "none":
+                    compressionType = CompressionType.None;
+                    break;
 
-				case "gzip":
-					compressionType = CompressionType.Gzip;
-					break;
+                case "gzip":
+                    compressionType = CompressionType.Gzip;
+                    break;
 
-				case "lz4":
-					compressionType = CompressionType.LZ4;
-					break;
+                case "lz4":
+                    compressionType = CompressionType.LZ4;
+                    break;
 
-				case "quicklz":
-					compressionType = CompressionType.QuickLZ;
-					break;
+                case "quicklz":
+                    compressionType = CompressionType.QuickLZ;
+                    break;
 
-				default:
-					throw new NotSupportedException(string.Format("Given compression type {0} not supported", compressionTypeString));
-			}
+                default:
+                    throw new NotSupportedException(string.Format("Given compression type {0} not supported", compressionTypeString));
+            }
 
-			switch (compressionType)
-			{
-				case CompressionType.None:
-					return null;
+            switch (compressionType)
+            {
+                case CompressionType.None:
+                    return null;
 
-				case CompressionType.Gzip:										
+                case CompressionType.Gzip:										
 
-					if (_compressor == null)
-					{
-						lock (CompressorSync)
-						{
-							if (_compressor == null)
-							{
-								_compressor = new GzipCompressor();								
-							}
-						}
-					}
+                    if (_compressor == null)
+                    {
+                        lock (CompressorSync)
+                        {
+                            if (_compressor == null)
+                            {
+                                _compressor = new GzipCompressor();								
+                            }
+                        }
+                    }
 
-					return _compressor;
+                    return _compressor;
 
-				case CompressionType.LZ4:
+                case CompressionType.LZ4:
 
-					if (_compressor == null)
-					{
-						lock (CompressorSync)
-						{
-							if (_compressor == null)
-								_compressor = new LZ4Compressor();
-						}
-					}
+                    if (_compressor == null)
+                    {
+                        lock (CompressorSync)
+                        {
+                            if (_compressor == null)
+                                _compressor = new LZ4Compressor();
+                        }
+                    }
 
-					return _compressor;
+                    return _compressor;
 
-				case CompressionType.QuickLZ:
+                case CompressionType.QuickLZ:
 
-					if (_compressor == null)
-					{
-						lock (CompressorSync)
-						{
-							if (_compressor == null)
-							{
-								_compressor = new QuickLZCompressor();
-							}
-						}
-					}
+                    if (_compressor == null)
+                    {
+                        lock (CompressorSync)
+                        {
+                            if (_compressor == null)
+                            {
+                                _compressor = new QuickLZCompressor();
+                            }
+                        }
+                    }
 
-					return _compressor;		
+                    return _compressor;		
 
 
-				default:
-					throw new NotSupportedException(string.Format("Given compression type {0} not supported", compressionType.ToString()));
-			}
-		}
-	}
+                default:
+                    throw new NotSupportedException(string.Format("Given compression type {0} not supported", compressionType.ToString()));
+            }
+        }
+    }
 }

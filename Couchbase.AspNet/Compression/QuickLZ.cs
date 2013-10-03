@@ -9,22 +9,22 @@ namespace Couchbase.AspNet.Compression
 {
 	public class QuickLZCompressor : ICompressor
 	{
-		private static readonly QuickLZWrapper Compressor;
+		private readonly QuickLZWrapper _compressor;
 
-		static QuickLZCompressor()
+		public QuickLZCompressor()
 		{
-			Compressor = new QuickLZWrapper();
+			_compressor = new QuickLZWrapper();
 		}
 
 		public byte[] Compress(byte[] data)
 		{
-			return Compressor.Compress(data);
+			return _compressor.Compress(data);
 		}
 
 		public byte[] Decompress(MemoryStream input)
 		{
 			var bytes = input.ToArray();
-			return Compressor.Decompress(bytes);
+			return _compressor.Decompress(bytes);
 		}
 	}
 }

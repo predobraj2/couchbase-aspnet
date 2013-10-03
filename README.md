@@ -18,14 +18,15 @@ and purchase commercial license if required.
 * Provider write his configuration during start to Windows Event Log (version 1.3.1) and in addition to log file (starting from version 1.3.2).
   Check Application/CouchbaseSessionStateProvider source (using Event Viewer) and Logs/CouchbaseSessionStateProvider.log file
 * Starting from version 1.3.0, trivial MVC example was removed from solution.
+* Starting from version 1.3.3.3 target framework set to .NET 4.5
 
 ## Requirements
 
-* You'll need .NET Framework 4 or later to use the precompiled binaries.
+* You'll need .NET Framework 4.5 or later to use the precompiled binaries.
 * To build the client, you'll need Visual Studio 2012.
 * The Nuget package for CouchbaseNetClient (http://nuget.org/packages/CouchbaseNetClient) is referenced by Couchbase.AspNet
 * Couchbase Server 1.8 or 2.0
-* If you enable QuickLZ compression, please make sure you have QuickLZ dlls in the 'QuickLZC' subfolder inside bin folder of your application.
+* Important: If you enable QuickLZ compression, please make sure you have QuickLZ dlls in the 'QuickLZC' subfolder inside bin folder of your application.
 
 ## Configuring the SessionState provider
 
