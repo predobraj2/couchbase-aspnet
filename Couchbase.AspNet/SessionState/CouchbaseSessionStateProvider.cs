@@ -23,7 +23,7 @@ namespace Couchbase.AspNet.SessionState
 		private static bool _isLoggingEnabled;
 
 		private static ICompressor _compressor;				
-		private static readonly Logger Logger;
+		private static Logger _logger;
 		
 		private static bool _isFirstTimeInitialization = true;
 		private static readonly object FirstTimeInitializationSync = new object();
@@ -31,12 +31,7 @@ namespace Couchbase.AspNet.SessionState
 		#endregion
 
 		#region Constructors
-
-		static CouchbaseSessionStateProvider()
-		{
-			Logger = SetupLogger();
-		}
-
+	
 		#endregion
 
 		public override void Initialize(string name, System.Collections.Specialized.NameValueCollection config)
@@ -53,17 +48,30 @@ namespace Couchbase.AspNet.SessionState
 				{
 					if (_isFirstTimeInitialization)
 					{
-						// By default use exclusive session access. But allow it to be overridden in the config file
+                        var loggingEnabled = ProviderHelper.GetAndRemove(config, "logging", false) ?? "false";
+                        _isLoggingEnabled = (String.Compare(loggingEnabled, "true", StringComparison.OrdinalIgnoreCase) == 0);
+
+					    if (_isLoggingEnabled)
+					    {
+                            // Path where to store NLog logs (effective if useExistedLoggingConfig != "true")
+                            var loggingFileName = ProviderHelper.GetAndRemove(config, "loggingFilename", false) ?? "Logs/CouchbaseSessionStateProvider.log";
+                            
+                            // useExistedLoggingConfig = "true" to use existed application NLog config file 
+                            // or useExistedLoggingConfig = "false" (or just skip this config) to configure NLog in Couchbase provider and override application settings (if exists)
+                            var useExistedLoggingConfigString = ProviderHelper.GetAndRemove(config, "useExistedLoggingConfig", false) ?? "false";
+                            var useExistedLoggingConfig = (String.Compare(useExistedLoggingConfigString, "true", StringComparison.OrdinalIgnoreCase) == 0);
+                            
+                            _logger = SetupLogger(useExistedLoggingConfig, loggingFileName);
+					    }
+
+					    // By default use exclusive session access. But allow it to be overridden in the config file
 						var exclusive = ProviderHelper.GetAndRemove(config, "exclusiveAccess", false) ?? "true";
 						_exclusiveAccess = (String.Compare(exclusive, "true", StringComparison.OrdinalIgnoreCase) == 0);
 
 						// By default do not use compression on session data
 						var compress = ProviderHelper.GetAndRemove(config, "compress", false) ?? "false";
 						_compressData = (String.Compare(compress, "true", StringComparison.OrdinalIgnoreCase) == 0);
-
-						var loggingEnabled = ProviderHelper.GetAndRemove(config, "logging", false) ?? "false";
-						_isLoggingEnabled = (String.Compare(loggingEnabled, "true", StringComparison.OrdinalIgnoreCase) == 0);
-
+						
 						// By default we use lz4 instead of gzip, because it is considered much faster!
 						var compressionTypeString = ProviderHelper.GetAndRemove(config, "compressionType", false) ?? "quicklz";
 
@@ -94,7 +102,7 @@ namespace Couchbase.AspNet.SessionState
                 Timeout = timeout
             };
 
-			e.Save(_client, id, false, false, _compressor, _isLoggingEnabled ? Logger : null);
+			e.Save(_client, id, false, false, _compressor, _isLoggingEnabled ? _logger : null);
         }
 
 		public override void Dispose()
@@ -134,7 +142,7 @@ namespace Couchbase.AspNet.SessionState
             SessionStateItem e;
             do {
                 // Load the header for the item with CAS
-				e = SessionStateItem.Load(_client, id, true, _compressor, _isLoggingEnabled ? Logger : null);
+				e = SessionStateItem.Load(_client, id, true, _compressor, _isLoggingEnabled ? _logger : null);
 
                 // Bail if the entry does not exist, or the lock ID does not match our lock ID
                 if (e == null || e.LockId != tmp) {
@@ -144,13 +152,13 @@ namespace Couchbase.AspNet.SessionState
                 // Attempt to clear the lock for this item and loop around until we succeed
                 e.LockId = 0;
                 e.LockTime = DateTime.MinValue;
-			} while (!e.Save(_client, id, true, _exclusiveAccess, _compressor, _isLoggingEnabled ? Logger : null));
+			} while (!e.Save(_client, id, true, _exclusiveAccess, _compressor, _isLoggingEnabled ? _logger : null));
         }
 
         public override void RemoveItem(HttpContext context, string id, object lockId, SessionStateStoreData item)
         {
             var tmp = (ulong)lockId;
-			var e = SessionStateItem.Load(_client, id, true, _compressor, _isLoggingEnabled ? Logger : null);
+			var e = SessionStateItem.Load(_client, id, true, _compressor, _isLoggingEnabled ? _logger : null);
 
             if (e != null && e.LockId == tmp) {
                 SessionStateItem.Remove(_client, id);
@@ -162,13 +170,13 @@ namespace Couchbase.AspNet.SessionState
             SessionStateItem e;
             do {
                 // Load the item with CAS
-				e = SessionStateItem.Load(_client, id, false, _compressor, _isLoggingEnabled ? Logger : null);
+				e = SessionStateItem.Load(_client, id, false, _compressor, _isLoggingEnabled ? _logger : null);
                 if (e == null) {
                     break;
                 }
 
                 // Try to save with CAS, and loop around until we succeed
-			} while (!e.Save(_client, id, false, _exclusiveAccess, _compressor, _isLoggingEnabled ? Logger : null));
+			} while (!e.Save(_client, id, false, _exclusiveAccess, _compressor, _isLoggingEnabled ? _logger : null));
         }
 
         public override void SetAndReleaseItemExclusive(HttpContext context, string id, SessionStateStoreData item, object lockId, bool newItem)
@@ -179,7 +187,7 @@ namespace Couchbase.AspNet.SessionState
                     var tmp = (ulong)lockId;
 
                     // Load the entire item with CAS (need the DataCas value also for the save)
-					e = SessionStateItem.Load(_client, id, false, _compressor, _isLoggingEnabled ? Logger : null);
+					e = SessionStateItem.Load(_client, id, false, _compressor, _isLoggingEnabled ? _logger : null);
 
                     // if we're expecting an existing item, but
                     // it's not in the cache
@@ -200,7 +208,7 @@ namespace Couchbase.AspNet.SessionState
                 e.LockTime = DateTime.MinValue;
 
                 // Attempt to save with CAS and loop around if it fails
-			} while (!e.Save(_client, id, false, _exclusiveAccess && !newItem, _compressor, _isLoggingEnabled ? Logger : null));
+			} while (!e.Save(_client, id, false, _exclusiveAccess && !newItem, _compressor, _isLoggingEnabled ? _logger : null));
         }
 
         public override bool SetItemExpireCallback(SessionStateItemExpireCallback expireCallback)
@@ -210,17 +218,21 @@ namespace Couchbase.AspNet.SessionState
 
 		#region Private Methods
 
-		private static Logger SetupLogger()
+		private static Logger SetupLogger(bool useExistedLoggingConfig, string filename)
 		{
-			var config = new LoggingConfiguration();
-			var fileTarget = new FileTarget();
-			config.AddTarget("file", fileTarget);
-			fileTarget.FileName = "${basedir}/Logs/CouchbaseSessionStateProvider.log";
-			fileTarget.Layout = "${longdate}|${level:uppercase=true}|${message}";
-			var rule = new LoggingRule("*", LogLevel.Debug, fileTarget);
-			config.LoggingRules.Add(rule);
-			NLog.LogManager.Configuration = config;
-			return NLog.LogManager.GetCurrentClassLogger();
+		    if (!useExistedLoggingConfig)
+		    {
+		        var config = new LoggingConfiguration();
+		        var fileTarget = new FileTarget();
+		        config.AddTarget("file", fileTarget);
+		        fileTarget.FileName = "${basedir}/" + filename;
+		        fileTarget.Layout = "${longdate}|${level:uppercase=true}|${message}";
+		        var rule = new LoggingRule("*", LogLevel.Debug, fileTarget);
+		        config.LoggingRules.Add(rule);
+		        NLog.LogManager.Configuration = config;
+		    }
+
+		    return NLog.LogManager.GetCurrentClassLogger();
 		}
 
 		private static SessionStateItem Get(IMemcachedClient client, bool acquireLock, string id, out bool locked, out TimeSpan lockAge, out object lockId, out SessionStateActions actions)
@@ -230,7 +242,7 @@ namespace Couchbase.AspNet.SessionState
 			lockAge = TimeSpan.Zero;
 			actions = SessionStateActions.None;
 
-			var e = SessionStateItem.Load(client, id, false, _compressor, _isLoggingEnabled ? Logger : null);
+			var e = SessionStateItem.Load(client, id, false, _compressor, _isLoggingEnabled ? _logger : null);
 			if (e == null)
 				return null;
 
@@ -252,7 +264,7 @@ namespace Couchbase.AspNet.SessionState
 					e.Flag = SessionStateActions.None;
 
 					// try to update the item in the store
-					if (e.Save(client, id, true, _exclusiveAccess, _compressor, _isLoggingEnabled ? Logger : null))
+					if (e.Save(client, id, true, _exclusiveAccess, _compressor, _isLoggingEnabled ? _logger : null))
 					{
 						locked = true;
 						lockId = e.LockId;
@@ -261,7 +273,7 @@ namespace Couchbase.AspNet.SessionState
 					}
 
 					// it has been modified between we loaded and tried to save it
-					e = SessionStateItem.Load(client, id, false, _compressor, _isLoggingEnabled ? Logger : null);
+					e = SessionStateItem.Load(client, id, false, _compressor, _isLoggingEnabled ? _logger : null);
 					if (e == null)
 						return null;
 				}
@@ -295,7 +307,7 @@ namespace Couchbase.AspNet.SessionState
 
 				log.WriteEntry(str);
 
-				Logger.Info(str);
+				_logger.Info(str);
 			}
 		}
 
