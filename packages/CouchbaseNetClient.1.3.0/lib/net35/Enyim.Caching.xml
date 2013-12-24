@@ -4,6 +4,28 @@
         <name>Enyim.Caching</name>
     </assembly>
     <members>
+        <member name="T:Enyim.Caching.Memcached.Protocol.Binary.SaslStepExtensions">
+            <summary>
+            Provides a means of accessing internal protected methods of the SaslStep class to
+            assemblies that are using the SaslStep class without changing the interface of that
+            class.
+            </summary>
+        </member>
+        <member name="M:Enyim.Caching.Memcached.Protocol.Binary.SaslStepExtensions.GetBuffer(Enyim.Caching.Memcached.Protocol.Binary.SaslStep)">
+            <summary>
+            Gets the buffer of the current SaslStep
+            </summary>
+            <param name="step">The current Sasl step.</param>
+            <returns></returns>
+        </member>
+        <member name="M:Enyim.Caching.Memcached.Protocol.Binary.SaslStepExtensions.ReadResponse(Enyim.Caching.Memcached.Protocol.Binary.SaslStep,Enyim.Caching.Memcached.IPooledSocket)">
+            <summary>
+            Reads the response.
+            </summary>
+            <param name="step">The current SaslStep.</param>
+            <param name="socket">The socket.to read from.</param>
+            <returns></returns>
+        </member>
         <member name="T:Enyim.Caching.Configuration.IAuthenticationConfiguration">
             <summary>
             Defines an interface for configuring the authentication paramaters the <see cref="T:MemcachedClient"/>.
@@ -926,6 +948,16 @@
             <param name="keys">The list of identifiers for the items to retrieve.</param>
             <returns>a Dictionary holding all items indexed by their key.</returns>
         </member>
+        <member name="M:Enyim.Caching.MemcachedClient.PerformMultiGet``1(System.Collections.Generic.IEnumerable{System.String},System.Func{Enyim.Caching.Memcached.IMultiGetOperation,System.Collections.Generic.KeyValuePair{System.String,Enyim.Caching.Memcached.CacheItem},``0},System.Func{Enyim.Caching.Memcached.Results.IOperationResult,``0})">
+            <summary>
+            Performs the retrieval of multiple items from the cache.
+            </summary>
+            <param name="keys">The list of identifiers for the items to retrieve.</param>
+            <param name="collector">The collector of found items.</param>
+            <param name="failureCollector">The collector of failed items. If <c>null</c>, failed items are ignored.</param>
+            <remarks>If item is not retrieved because key does not exist, it will be omitted from the returned dictionary even if <paramref name="failureCollector"/> is specified.</remarks>
+            <returns>a Dictionary holding items indexed by their key.</returns>
+        </member>
         <member name="M:Enyim.Caching.MemcachedClient.SafeWaitAllAndDispose(System.Threading.WaitHandle[])">
             <summary>
             Waits for all WaitHandles and works in both STA and MTA mode.
@@ -1212,7 +1244,33 @@
             <param name="key">The identifier for the item to delete.</param>
             <returns>true if the item was successfully removed from the cache; false otherwise.</returns>
         </member>
-        <member name="F:Enyim.Caching.Memcached.PooledSocket.InstanceId">
+        <member name="M:Enyim.Caching.Memcached.IPooledSocket.Release">
+            <summary>
+            replaces call to Dispose to release instance back into pool
+            </summary>
+        </member>
+        <member name="M:Enyim.Caching.Memcached.IPooledSocket.ReadByte">
+            <summary>
+            Reads the next byte from the server's response.
+            </summary>
+            <remarks>This method blocks and will not return until the value is read.</remarks>
+        </member>
+        <member name="M:Enyim.Caching.Memcached.IPooledSocket.Read(System.Byte[],System.Int32,System.Int32)">
+            <summary>
+            Reads data from the server into the specified buffer.
+            </summary>
+            <param name="buffer">An array of <see cref="T:System.Byte"/> that is the storage location for the received data.</param>
+            <param name="offset">The location in buffer to store the received data.</param>
+            <param name="count">The number of bytes to read.</param>
+            <remarks>This method blocks and will not return until the specified amount of bytes are read.</remarks>
+        </member>
+        <member name="M:Enyim.Caching.Memcached.IPooledSocket.ReceiveAsync(Enyim.Caching.Memcached.AsyncIOArgs)">
+            <summary>
+            Receives data asynchronously. Returns true if the IO is pending. Returns false if the socket already failed or the data was available in the buffer.
+            p.Next will only be called if the call completes asynchronously.
+            </summary>
+        </member>
+        <member name="F:Enyim.Caching.Memcached.PooledSocket._instanceId">
             <summary>
             The ID of this instance. Used by the <see cref="T:MemcachedServer"/> to identify the instance in its inner lists.
             </summary>
@@ -1345,6 +1403,45 @@
         <member name="M:Enyim.Caching.Memcached.CommandNotSupportedException.#ctor(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)">
             <summary>
             Initializes a new instance of the <see cref="T:CommandNotSupportedException"/> class with serialized data.
+            </summary>
+        </member>
+        <member name="T:Enyim.Caching.Memcached.IResourcePool">
+            <summary>
+            Provides an interface for implementing pools of disposable IPooledSocket objects.
+            </summary>
+        </member>
+        <member name="M:Enyim.Caching.Memcached.IResourcePool.Acquire">
+            <summary>
+            Acquires an object from the pool.
+            </summary>
+            <returns>A pooled object</returns>
+        </member>
+        <member name="M:Enyim.Caching.Memcached.IResourcePool.Release(Enyim.Caching.Memcached.IPooledSocket)">
+            <summary>
+            Releases an object back into the pool.
+            </summary>
+            <param name="resource"></param>
+        </member>
+        <member name="M:Enyim.Caching.Memcached.IResourcePool.Close(Enyim.Caching.Memcached.IPooledSocket)">
+            <summary>
+            Closes all of the underlying resources held by the pooled object.
+            </summary>
+            <param name="resource"></param>
+        </member>
+        <member name="M:Enyim.Caching.Memcached.IResourcePool.Ping">
+            <summary>
+            Pulls a socket from the pool and checks it's connection status.
+            </summary>
+            <returns></returns>
+        </member>
+        <member name="M:Enyim.Caching.Memcached.IResourcePool.Resurrect">
+            <summary>
+            Tries to recreate the underlying pool of objects.
+            </summary>
+        </member>
+        <member name="P:Enyim.Caching.Memcached.IResourcePool.IsAlive">
+            <summary>
+            Checks to see if the underlying resource is still "alive".
             </summary>
         </member>
         <member name="T:Enyim.Caching.Memcached.IServerPool">
@@ -1588,13 +1685,13 @@
             </summary>
             <returns>An <see cref="T:PooledSocket"/> instance which is connected to the memcached server, or <value>null</value> if the pool is dead.</returns>
         </member>
-        <member name="M:Enyim.Caching.Memcached.MemcachedNode.InternalPoolImpl.ReleaseSocket(Enyim.Caching.Memcached.PooledSocket)">
+        <member name="M:Enyim.Caching.Memcached.MemcachedNode.InternalPoolImpl.ReleaseSocket(Enyim.Caching.Memcached.IPooledSocket)">
             <summary>
             Releases an item back into the pool
             </summary>
             <param name="socket"></param>
         </member>
-        <member name="M:Enyim.Caching.Memcached.IOperation.ReadResponseAsync(Enyim.Caching.Memcached.PooledSocket,System.Action{System.Boolean})">
+        <member name="M:Enyim.Caching.Memcached.IOperation.ReadResponseAsync(Enyim.Caching.Memcached.IPooledSocket,System.Action{System.Boolean})">
             <summary>
             'next' is called when the operation completes. The bool parameter indicates the success of the operation.
             </summary>
@@ -1627,7 +1724,7 @@
             Authenticates the new socket before it is put into the pool.
             </summary>
         </member>
-        <member name="M:Enyim.Caching.Memcached.Protocol.Binary.BinaryNode.Auth(Enyim.Caching.Memcached.PooledSocket)">
+        <member name="M:Enyim.Caching.Memcached.Protocol.Binary.BinaryNode.Auth(Enyim.Caching.Memcached.IPooledSocket)">
             <summary>
             Implements memcached's SASL auth sequence. (See the protocol docs for more details.)
             </summary>
@@ -1644,7 +1741,7 @@
             Server pool implementing the binary protocol.
             </summary>
         </member>
-        <member name="M:Enyim.Caching.Memcached.Protocol.Binary.BinaryResponse.ReadAsync(Enyim.Caching.Memcached.PooledSocket,System.Action{System.Boolean},System.Boolean@)">
+        <member name="M:Enyim.Caching.Memcached.Protocol.Binary.BinaryResponse.ReadAsync(Enyim.Caching.Memcached.IPooledSocket,System.Action{System.Boolean},System.Boolean@)">
             <summary>
             Reads the response from the socket asynchronously.
             </summary>
@@ -1682,7 +1779,7 @@
             Starts the SASL auth sequence.
             </summary>
         </member>
-        <member name="M:Enyim.Caching.Memcached.Protocol.Text.TextSocketHelper.ReadResponse(Enyim.Caching.Memcached.PooledSocket)">
+        <member name="M:Enyim.Caching.Memcached.Protocol.Text.TextSocketHelper.ReadResponse(Enyim.Caching.Memcached.IPooledSocket)">
             <summary>
             Reads the response of the server.
             </summary>
@@ -1691,7 +1788,7 @@
             <exception cref="T:Enyim.Caching.Memcached.MemcachedException">The server did not specified any reason just returned the string ERROR. - or - The server returned a SERVER_ERROR, in this case the Message of the exception is the message returned by the server.</exception>
             <exception cref="T:Enyim.Caching.Memcached.MemcachedClientException">The server did not recognize the request sent by the client. The Message of the exception is the message returned by the server.</exception>
         </member>
-        <member name="M:Enyim.Caching.Memcached.Protocol.Text.TextSocketHelper.ReadLine(Enyim.Caching.Memcached.PooledSocket)">
+        <member name="M:Enyim.Caching.Memcached.Protocol.Text.TextSocketHelper.ReadLine(Enyim.Caching.Memcached.IPooledSocket)">
             <summary>
             Reads a line from the socket. A line is terninated by \r\n.
             </summary>

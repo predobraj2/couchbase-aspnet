@@ -71,13 +71,15 @@ namespace Couchbase.AspNet.SessionState
 						// By default do not use compression on session data
 						var compress = ProviderHelper.GetAndRemove(config, "compress", false) ?? "false";
 						_compressData = (String.Compare(compress, "true", StringComparison.OrdinalIgnoreCase) == 0);
-						
-						// By default we use lz4 instead of gzip, because it is considered much faster!
-						var compressionTypeString = ProviderHelper.GetAndRemove(config, "compressionType", false) ?? "quicklz";
 
-						_compressor = CompressorFactory.Create(compressionTypeString);
+					    if (_compressData)
+					    {
+					        // By default we use lz4 instead of gzip, because it is considered much faster!
+					        var compressionTypeString = ProviderHelper.GetAndRemove(config, "compressionType", false) ?? "quicklz";
+					        _compressor = CompressorFactory.Create(compressionTypeString);
+					    }
 
-						LogProviderConfiguration();
+					    LogProviderConfiguration();
 
 						// Make sure no extra attributes are included
 						ProviderHelper.CheckForUnknownAttributes(config);
