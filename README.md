@@ -182,3 +182,6 @@ Once configured, simply enable output cache as you already do with ASP.NET MVC
 or with ASP.NET WebForms
 
     <%@ OutputCache Duration="60" VaryByParam="foo" %>
+
+[![Bitdeli Badge](https://d2weczhvl823v0.cloudfront.net/evereq/couchbase-aspnet/trend.png)](https://bitdeli.com/free "Bitdeli Badge")
+
